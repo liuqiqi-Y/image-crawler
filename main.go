@@ -4,50 +4,103 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
+	"math/rand"
+	"net"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gocolly/colly"
+	"github.com/gocolly/colly/extensions"
 )
+
+const _letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func RandomString() string {
+	b := make([]byte, rand.Intn(10)+10)
+	for i := range b {
+		b[i] = _letterBytes[rand.Intn(len(_letterBytes))]
+	}
+	return string(b)
+}
 
 func main() {
 	// Instantiate default collector
-	c := colly.NewCollector(
+	c1 := colly.NewCollector(
 	// Visit only domains: hackerspaces.org, wiki.hackerspaces.org
 	//colly.AllowedDomains("hackerspaces.org", "wiki.hackerspaces.org"),
 	//colly.Async(true),
 	)
-	c1 := c.Clone()
-	c2 := c.Clone()
-	c.OnHTML("ul figure a", func(e *colly.HTMLElement) {
-		var imageLink string
-		// e.ForEach("a", func(i int, h *colly.HTMLElement) {
-		// 	imageLink = h.Attr("href")
-		// 	return
-		// })
+
+	c1.WithTransport(&http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	})
+
+	c2 := c1.Clone()
+	c3 := c1.Clone()
+
+	extensions.RandomUserAgent(c1)
+	extensions.RandomUserAgent(c2)
+	extensions.RandomUserAgent(c3)
+
+	c1filterStr1 := "body>main>div:first-of-type>section:first-of-type>ul>li>figure>a"
+	// c1filterStr2 := "body>main>div:first-of-type>ul>li>a.next[href]"
+	c1.OnHTML(c1filterStr1, func(e *colly.HTMLElement) {
+		imageLink := ""
 		imageLink = e.Attr("href")
-		fmt.Printf("image link found: %s\n", imageLink)
-		c1.Visit(imageLink)
+		log.Printf("image detail link found: %s\n", imageLink)
+		c2.Visit(imageLink)
 	})
-	c.OnError(func(r *colly.Response, err error) {
-		fmt.Println("Request URL:", r.Request.URL, "failed with response:", r, "\nError:", err)
+	// c1.OnHTML(c1filterStr2, func(h *colly.HTMLElement) {
+	// 	pageLink := h.Attr("href")
+	// 	c1.Visit(pageLink)
+	// })
+
+	c2.OnHTML("img[id=wallpaper][src]", func(e *colly.HTMLElement) {
+		link := e.Attr("src")
+		log.Printf("image data link found: %s\n", link)
+		c3.Visit(link)
 	})
-	c2.OnResponse(func(r *colly.Response) {
+	c3.OnResponse(func(r *colly.Response) {
 		ss := strings.Split(r.Request.URL.String(), "/")
 		if len(ss) == 0 {
+			log.Printf("invalid image data link : %s\n", r.Request.URL.String())
 			return
 		}
 		caption := ss[len(ss)-1]
-		fmt.Printf("Downloading image: %s\n", caption)
-		f, err := os.Create("./image/" + caption)
+		log.Printf("Downloading image: %s\n", caption)
+		f, err := os.Create(`.\image\` + caption)
 		if err != nil {
-			panic(err)
+			log.Printf("open file error: %s\n", err.Error())
+			return
 		}
+		defer f.Close()
 		io.Copy(f, bytes.NewReader(r.Body))
 	})
-	c1.OnHTML("img[id=wallpaper]", func(e *colly.HTMLElement) {
-		link := e.Attr("src")
-		c2.Visit(link)
-	})
-	c.Visit("https://wallhaven.cc/toplist?page=7")
+	//c1.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
+	// c1.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
+	// c2.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
+	// c3.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
+
+	// c1.Wait()
+	// c2.Wait()
+	// c3.Wait()
+
+	for i := 0; i < 1; i++ {
+		url := fmt.Sprintf("https://wallhaven.cc/toplist?page=%d", i+1)
+		c1.Visit(url)
+		fmt.Printf("第%d页访问结束", i+1)
+	}
+
 }
