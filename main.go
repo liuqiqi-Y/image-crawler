@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/gocolly/colly"
-	"github.com/gocolly/colly/extensions"
+	"github.com/gocolly/colly/debug"
 )
 
 const _letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -29,10 +29,12 @@ func RandomString() string {
 func main() {
 	// Instantiate default collector
 	c1 := colly.NewCollector(
-	// Visit only domains: hackerspaces.org, wiki.hackerspaces.org
-	//colly.AllowedDomains("hackerspaces.org", "wiki.hackerspaces.org"),
-	//colly.Async(true),
-	)
+		// Visit only domains: hackerspaces.org, wiki.hackerspaces.org
+		//colly.AllowedDomains("hackerspaces.org", "wiki.hackerspaces.org"),
+		//colly.Async(true),
+		colly.Debugger(&debug.LogDebugger{
+			Flag: log.Lshortfile,
+		}))
 
 	c1.WithTransport(&http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -50,43 +52,41 @@ func main() {
 	c2 := c1.Clone()
 	c3 := c1.Clone()
 
-	extensions.RandomUserAgent(c1)
-	extensions.RandomUserAgent(c2)
-	extensions.RandomUserAgent(c3)
+	// extensions.RandomUserAgent(c1)
+	// extensions.RandomUserAgent(c2)
+	// extensions.RandomUserAgent(c3)
 
 	c1filterStr1 := "body>main>div:first-of-type>section:first-of-type>ul>li>figure>a"
-	// c1filterStr2 := "body>main>div:first-of-type>ul>li>a.next[href]"
 	c1.OnHTML(c1filterStr1, func(e *colly.HTMLElement) {
 		imageLink := ""
 		imageLink = e.Attr("href")
-		log.Printf("image detail link found: %s\n", imageLink)
+		// log.Printf("image detail link found: %s\n", imageLink)
 		c2.Visit(imageLink)
 	})
-	// c1.OnHTML(c1filterStr2, func(h *colly.HTMLElement) {
-	// 	pageLink := h.Attr("href")
-	// 	c1.Visit(pageLink)
-	// })
 
 	c2.OnHTML("img[id=wallpaper][src]", func(e *colly.HTMLElement) {
 		link := e.Attr("src")
-		log.Printf("image data link found: %s\n", link)
+		// log.Printf("image data link found: %s\n", link)
 		c3.Visit(link)
 	})
 	c3.OnResponse(func(r *colly.Response) {
 		ss := strings.Split(r.Request.URL.String(), "/")
 		if len(ss) == 0 {
-			log.Printf("invalid image data link : %s\n", r.Request.URL.String())
+			// log.Printf("invalid image data link : %s\n", r.Request.URL.String())
 			return
 		}
 		caption := ss[len(ss)-1]
-		log.Printf("Downloading image: %s\n", caption)
+		// log.Printf("Downloading image: %s\n", caption)
 		f, err := os.Create(`.\image\` + caption)
 		if err != nil {
-			log.Printf("open file error: %s\n", err.Error())
+			// log.Printf("open file error: %s\n", err.Error())
 			return
 		}
 		defer f.Close()
 		io.Copy(f, bytes.NewReader(r.Body))
+	})
+	c3.OnError(func(r *colly.Response, err error) {
+		log.Println("Request URL:", r.Request.URL, "failed with response:", r, "\nError:", err)
 	})
 	//c1.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
 	// c1.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: 2})
