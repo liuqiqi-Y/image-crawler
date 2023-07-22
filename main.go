@@ -39,11 +39,11 @@ func main() {
 	// 	Flag: log.Lshortfile,
 	// }),
 	)
-	c2 := c1.Clone()
+	c2 := colly.NewCollector()
 	// c2.Async = true
 	// c2.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: _parallelistm})
 
-	c3 := c1.Clone()
+	c3 := colly.NewCollector()
 	// c3.Async = true
 	// c3.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: _parallelistm})
 	c3.SetRequestTimeout(0)
