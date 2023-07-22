@@ -82,7 +82,7 @@ func main() {
 
 		f, err := os.Create(`.\images\` + caption)
 		if err != nil {
-			panic(err.Error())
+			return
 		}
 		defer f.Close()
 		io.Copy(f, bytes.NewReader(r.Body))
